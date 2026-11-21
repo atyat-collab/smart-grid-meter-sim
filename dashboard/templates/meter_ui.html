@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Smart Grid Subscriber Meter</title>
+  <style>
+    :root {
+      --bg: #f4f6f9;
+      --card: #ffffff;
+      --text: #1e293b;
+      --muted: #64748b;
+      --primary: #0f4c81;
+      --border: #e2e8f0;
+      --ok: #16a34a;
+      --warn: #d97706;
+      --danger: #dc2626;
+    }
+    * { box-sizing: border-box; font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif; }
+    body { margin: 0; background: var(--bg); color: var(--text); padding: 24px; }
+    .container { max-width: 1100px; margin: 0 auto; }
+    header { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 20px; }
+    h1 { margin: 0; font-size: 24px; color: var(--primary); }
+    .selector-box { display: flex; align-items: center; gap: 10px; background: var(--card); padding: 10px 14px; border-radius: 10px; border: 1px solid var(--border); }
+    select { padding: 8px 12px; font-size: 15px; border-radius: 6px; border: 1px solid #cbd5e1; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; margin-bottom: 18px; }
+    .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 18px; box-shadow: 0 2px 6px rgba(0,0,0,0.03); }
+    .card-title { font-size: 13px; text-transform: uppercase; letter-spacing: 0.6px; color: var(--muted); margin-bottom: 10px; font-weight: 700; }
+    .meta-row { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid #f1f5f9; font-size: 15px; }
+    .meta-row:last-child { border-bottom: none; }
+    .cum-value { font-size: 38px; font-weight: 800; color: var(--primary); margin: 8px 0; }
+    .metrics { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 10px; }
+    .metric-box { background: #f8fafc; border: 1px solid var(--border); border-radius: 8px; padding: 12px; text-align: center; }
+    .metric-label { font-size: 12px; color: var(--muted); }
+    .metric-val { font-size: 20px; font-weight: 700; margin-top: 4px; }
+    .lights { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+    .light-item { display: flex; align-items: center; gap: 10px; background: #f8fafc; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--border); font-weight: 600; font-size: 14px; }
+    .dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; }
+    .dot-green { background: var(--ok); box-shadow: 0 0 8px var(--ok); }
+    .dot-red { background: var(--danger); box-shadow: 0 0 8px var(--danger); }
+    .dot-amber { background: var(--warn); box-shadow: 0 0 8px var(--warn); }
+    .actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 8px; }
+    button { border: none; padding: 10px 14px; border-radius: 8px; font-weight: 600; cursor: pointer; font-size: 14px; transition: opacity 0.15s; }
+    button:hover { opacity: 0.9; }
+    .btn-warn { background: #fef3c7; color: #92400e; border: 1px solid #f59e0b; }
+    .btn-danger { background: #fee2e2; color: #991b1b; border: 1px solid #ef4444; }
+    .btn-normal { background: #dcfce7; color: #166534; border: 1px solid #22c55e; }
+    table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    th, td { text-align: left; padding: 10px; border-bottom: 1px solid var(--border); }
+    th { color: var(--muted); font-size: 12px; text-transform: uppercase; }
+    .badge { padding: 3px 8px; border-radius: 6px; font-size: 12px; font-weight: 700; background: #e2e8f0; }
+    .ts { color: var(--muted); font-size: 12px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>Smart Grid Subscriber Meter</h1>
+      <div class="selector-box">
+        <label for="meterSelect"><strong>Select Meter:</strong></label>
+        <select id="meterSelect" onchange="onMeterChange()">
+          {% for m in meters %}
+            <option value="{{ m.meter_id }}">{{ m.meter_id }} ({{ m.meter_type }} - {{ m.transformer_id }})</option>
+          {% endfor %}
+        </select>
+      </div>
+    </header>
+
+    <div class="grid">
+      <div class="card">
+        <div class="card-title">Meter Information</div>
+        <div class="meta-row"><span>Meter ID</span><strong id="infoId">-</strong></div>
+        <div class="meta-row"><span>Type</span><strong id="infoType">-</strong></div>
+        <div class="meta-row"><span>Transformer</span><strong id="infoTransformer">-</strong></div>
+        <div class="meta-row"><span>Status</span><strong id="infoStatus">-</strong></div>
+        <div class="meta-row"><span>Last Update</span><span class="ts" id="infoTs">-</span></div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Cumulative Consumption</div>
+        <div class="cum-value"><span id="cumKwh">0.0000</span> <span style="font-size:18px;">kWh</span></div>
+        <div class="ts">Total recorded energy consumption</div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Status Indicators</div>
+        <div class="lights">
+          <div class="light-item"><span id="lightConnDot" class="dot dot-green"></span><span>Connection: <span id="lightConnText">ONLINE</span></span></div>
+          <div class="light-item"><span id="lightPowerDot" class="dot dot-green"></span><span>Power Supply: <span id="lightPowerText">ON</span></span></div>
+          <div class="light-item"><span id="lightTamperDot" class="dot dot-green"></span><span>Tamper: <span id="lightTamperText">CLEAR</span></span></div>
+          <div class="light-item"><span id="lightSecDot" class="dot dot-green"></span><span>Security: <span id="lightSecText">SECURE</span></span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom: 18px;">
+      <div class="card-title">Live Electrical Measurements</div>
+      <div class="metrics">
+        <div class="metric-box">
+          <div class="metric-label">Active Power</div>
+          <div class="metric-val"><span id="valPower">0.00</span> W</div>
+        </div>
+        <div class="metric-box">
+          <div class="metric-label">Voltage</div>
+          <div class="metric-val"><span id="valVoltage">0.00</span> V</div>
+        </div>
+        <div class="metric-box">
+          <div class="metric-label">Current</div>
+          <div class="metric-val"><span id="valCurrent">0.000</span> A</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom: 18px;">
+      <div class="card-title">Event &amp; Fault Simulation Controls</div>
+      <div class="actions">
+        <button class="btn-warn" onclick="triggerSimulation('COVER_OPEN')">Cover Open</button>
+        <button class="btn-warn" onclick="triggerSimulation('MAGNET_DETECTED')">Magnet Detected</button>
+        <button class="btn-danger" onclick="triggerSimulation('BYPASS_50')">Meter Bypass (50%)</button>
+        <button class="btn-danger" onclick="triggerSimulation('POWER_OUTAGE')">Power Outage</button>
+        <button class="btn-normal" onclick="triggerSimulation('NORMAL')">Restore Normal</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Recent Meter Events</div>
+      <table>
+        <thead>
+          <tr>
+            <th>Timestamp</th>
+            <th>Event</th>
+            <th>Description</th>
+          </tr>
+        </thead>
+        <tbody id="eventsBody">
+          <tr><td colspan="3" class="ts">No events recorded yet.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <script>
+    function getSelectedMeter() {
+      return document.getElementById("meterSelect").value;
+    }
+
+    function renderState(data) {
+      const m = data.meter;
+      const r = data.reading;
+      const lights = data.lights;
+      const events = data.events || [];
+
+      document.getElementById("infoId").textContent = m.meter_id;
+      document.getElementById("infoType").textContent = m.meter_type.toUpperCase();
+      document.getElementById("infoTransformer").textContent = m.transformer_id;
+      document.getElementById("infoStatus").textContent = m.status;
+      document.getElementById("infoTs").textContent = r ? r.timestamp : "-";
+
+      document.getElementById("cumKwh").textContent = r ? Number(r.cumulative_energy_kwh).toFixed(4) : "0.0000";
+      document.getElementById("valPower").textContent = r ? Number(r.power_w).toFixed(2) : "0.00";
+      document.getElementById("valVoltage").textContent = r ? Number(r.voltage_v).toFixed(2) : "0.00";
+      document.getElementById("valCurrent").textContent = r ? Number(r.current_a).toFixed(3) : "0.000";
+
+      document.getElementById("lightConnText").textContent = lights.connection;
+      document.getElementById("lightConnDot").className = "dot dot-green";
+
+      document.getElementById("lightPowerText").textContent = lights.power_supply;
+      document.getElementById("lightPowerDot").className = lights.power_supply === "ON" ? "dot dot-green" : "dot dot-red";
+
+      document.getElementById("lightTamperText").textContent = lights.tamper;
+      document.getElementById("lightTamperDot").className = lights.tamper === "CLEAR" ? "dot dot-green" : "dot dot-amber";
+
+      document.getElementById("lightSecText").textContent = lights.security;
+      document.getElementById("lightSecDot").className = lights.security === "SECURE" ? "dot dot-green" : "dot dot-red";
+
+      const tbody = document.getElementById("eventsBody");
+      if (events.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="3" class="ts">No events recorded yet.</td></tr>';
+      } else {
+        tbody.innerHTML = events.map(ev => `
+          <tr>
+            <td class="ts">${ev.timestamp}</td>
+            <td><span class="badge">${ev.event_type}</span></td>
+            <td>${ev.description}</td>
+          </tr>
+        `).join("");
+      }
+    }
+
+    async function fetchState(tick = false) {
+      const meterId = getSelectedMeter();
+      const res = await fetch(`/api/ui/state?meter_id=${encodeURIComponent(meterId)}&tick=${tick ? "1" : "0"}`);
+      if (res.ok) {
+        const data = await res.json();
+        renderState(data);
+      }
+    }
+
+    async function triggerSimulation(action) {
+      const meterId = getSelectedMeter();
+      const res = await fetch("/api/ui/simulate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ meter_id: meterId, action: action })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        await fetchState(false);
+      }
+    }
+
+    function onMeterChange() {
+      fetchState(false);
+    }
+
+    fetchState(false);
+    setInterval(() => fetchState(true), 3000);
+  </script>
+</body>
+</html>
